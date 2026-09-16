@@ -1,0 +1,33 @@
+{
+  "name": "daltron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DALTRON TECHNOLOGIES ecosystem monorepo",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev:all",
+    "dev:all": "npm run dev:web",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build": "npm run build:all",
+    "build:all": "npm run build:web",
+    "build:web": "npm --workspace apps/web run build",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"Tests not configured yet\""
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^7.0.0"
+  },
+  "dependencies": {
+    "react-router-dom": "^7.18.3"
+  }
+}
