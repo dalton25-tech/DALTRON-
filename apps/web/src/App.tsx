@@ -12,7 +12,7 @@ import Innovation from './components/Innovation'
 import Company from './components/Company'
 import CTA from './components/CTA'
 import Footer from './components/Footer'
-
+import Navbar from './components/Navbar'
 import Nexa from './pages/Nexa'
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
@@ -20,22 +20,14 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 function Home() {
   return (
     <div>
-      <header className="navbar">
-        <div className="logo">
-          DALTRON
-        </div>
+      <Navbar />
 
-        <nav className="nav-links">
-          <a href="#home">Home</a>
-          <a href="#products">Products</a>
-          <a href="#ecosystem">Ecosystem</a>
-          <a href="#company">Company</a>
-        </nav>
-
-        <button className="sign-in">
-          Sign in
-        </button>
-      </header>
+      <Hero />
+      <Products />
+      <Ecosystem />
+      <Vision />
+      <Hardware />
+      <Intelligence />
 
       <Hero />
       <Products />

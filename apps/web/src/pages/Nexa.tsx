@@ -1,20 +1,11 @@
+import Navbar from "../components/Navbar";
+import NexaChat from "../components/NexaChat";
+
 function Nexa() {
   return (
   <main className="nexa-page">
 
-  <header className="nexa-navbar">
-    <a href="/" className="nexa-logo">
-      DALTRON
-    </a>
-
-    <div className="nexa-nav-right">
-      <span>NEXA</span>
-
-      <a href="/">
-        Back to DALTRON
-      </a>
-    </div>
-  </header>
+      <Navbar />
       <section className="nexa-hero">
         <div className="nexa-hero-content">
           <p className="section-label">DALTRON INTELLIGENCE</p>
@@ -123,6 +114,29 @@ function Nexa() {
           <div>Cloud</div>
           <span>↓</span>
           <div>Devices</div>
+        </div>
+      </section>
+      <section id="nexa-experience" className="nexa-experience">
+        <NexaChat />
+        <div className="nexa-experience-content">
+          <p className="section-label">NEXA EXPERIENCE</p>
+
+          <h2>
+            Your intelligent
+            <br />
+            companion.
+          </h2>
+
+          <p>
+            The Nexa experience will bring together
+            conversation, assistance, connected services,
+            and the intelligence of the DALTRON ecosystem.
+          </p>
+
+          <div className="nexa-status">
+            <span></span>
+            Nexa intelligence layer — building
+          </div>
         </div>
       </section>
       </main>
