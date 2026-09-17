@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import nexaRoutes from './routes/nexaRoutes'
 
 const app = express()
 
@@ -13,19 +14,7 @@ app.get('/health', (_req, res) => {
   })
 })
 
-app.post('/api/nexa/chat', (req, res) => {
-  const { message } = req.body
-
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({
-      error: 'A message is required.',
-    })
-  }
-
-  res.json({
-    message: `Nexa Backend received: ${message}`,
-  })
-})
+app.use('/api/nexa', nexaRoutes)
 
 const PORT = 4000
 
