@@ -23,12 +23,14 @@
     "services/*"
   ],
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "typescript": "^7.0.0"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "express": "^5.2.1",
     "react-router-dom": "^7.18.3"
   }
