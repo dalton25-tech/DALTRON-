@@ -61,6 +61,35 @@ function Products() {
 
           <button>Explore Orbit →</button>
         </article>
+        <article className="product-card">
+          <div className="product-icon">A</div>
+
+          <p className="product-category">PHONE</p>
+
+          <h3>Aria</h3>
+
+          <p>
+            DALTRON's flagship phone, built around Nexa with an
+            AI button and fingerprint interaction.
+          </p>
+
+          <button>Explore Aria →</button>
+        </article>
+
+        <article className="product-card">
+          <div className="product-icon">L</div>
+
+          <p className="product-category">TABLET</p>
+
+          <h3>Luma</h3>
+
+          <p>
+            DALTRON's tablet for learning and entertainment,
+            with Nexa built in to study, create, and explore.
+          </p>
+
+          <button>Explore Luma →</button>
+        </article>
       </div>
     </section>
   );

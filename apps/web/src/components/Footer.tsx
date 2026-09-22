@@ -27,9 +27,10 @@ function Footer() {
           <div>
             <h4>Technology</h4>
             <a href="/nexa">Nexa</a>
-            <a href="#intelligent">Sora</a>
-            <a href="#intelligent">Orbit</a>
-            <a href="#cloud">Cloud</a>
+            <a href="/sora">Sora</a>
+            <a href="/orbit">Orbit</a>
+            <a href="/luma">Luma</a>
+            <a href="/aria">Aria</a>
           </div>
 
           <div>

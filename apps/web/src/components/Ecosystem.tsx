@@ -51,6 +51,10 @@ function Ecosystem() {
           <strong>Sonic</strong>
           <span>Audio</span>
         </div>
+        <div className="ecosystem-node node-aria">
+          <strong>Aria</strong>
+          <span>Phone</span>
+        </div>
       </div>
     </section>
   );

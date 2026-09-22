@@ -28,7 +28,7 @@ function Hardware() {
 
           <div className="hardware-info">
             <span>SMARTPHONE</span>
-            <h3>DALTRON Phone</h3>
+            <h3>Aria</h3>
             <p>
               A new generation of mobile technology built
               around the DALTRON ecosystem.

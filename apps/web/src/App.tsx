@@ -14,6 +14,10 @@ import CTA from './components/CTA'
 import Footer from './components/Footer'
 import Navbar from './components/Navbar'
 import Nexa from './pages/Nexa'
+import Aria from './pages/Aria'
+import Sora from './pages/sora'
+import Orbit from './pages/Orbit'
+import Luma from './pages/Luma'
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
@@ -51,6 +55,10 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/nexa" element={<Nexa />} />
+        <Route path="/aria" element={<Aria />} />
+        <Route path="/sora" element={<Sora />} />
+        <Route path="/orbit" element={<Orbit />} />
+        <Route path="/luma" element={<Luma />} />
       </Routes>
     </BrowserRouter>
   )
