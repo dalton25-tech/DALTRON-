@@ -6,8 +6,8 @@ export interface AIConfig {
 }
 
 export const defaultAIConfig: AIConfig = {
-  modelName: "test-model",
-  providerName: "test",
+  modelName: "gemini-3.6-flash",
+  providerName: "gemini",
   temperature: 0.7,
   maxTokens: 1000,
 };

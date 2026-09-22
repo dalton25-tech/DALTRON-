@@ -1,10 +1,10 @@
-import type { AIConfig } from "./config/config";
-import { defaultAIConfig } from "./config/config";
-import { InferenceEngine } from "./inference/inference";
-import { getModel } from "./models/model-registry";
-import { getProvider } from "./models/providers/provider-registry";
-import type { AIRequest } from "./request";
-import type { AIResponse } from "./response";
+import type { AIConfig } from "./config/config.js";
+import { defaultAIConfig } from "./config/config.js";
+import { InferenceEngine } from "./inference/inference.js";
+import { getModel } from "./models/model-registry.js";
+import { getProvider } from "./models/providers/provider-registry.js";
+import type { AIRequest } from "./request.js";
+import type { AIResponse } from "./response.js";
 
 export class AIEngine {
   private inference: InferenceEngine;

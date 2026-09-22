@@ -1,4 +1,4 @@
-import type { AIModel } from "./model";
+import type { AIModel } from "./model.js";
 
 export function supportsStreaming(model: AIModel): boolean {
   return model.capabilities.streaming;

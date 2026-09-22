@@ -1,4 +1,4 @@
-import { AIEngine } from "./engine";
+import { AIEngine } from "./engine.js";
 
 const engine = new AIEngine();
 

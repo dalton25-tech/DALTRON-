@@ -1,6 +1,7 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import nexaRoutes from './routes/nexaRoutes'
+import nexaRoutes from './routes/nexaRoutes.js'
 
 const app = express()
 

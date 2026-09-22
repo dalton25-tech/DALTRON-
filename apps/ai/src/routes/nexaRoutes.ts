@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { chatWithNexa } from '../controllers/nexaController'
+import { chatWithNexa } from '../controllers/nexaController.js'
 
 const router = Router()
 

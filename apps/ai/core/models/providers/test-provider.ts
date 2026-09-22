@@ -1,4 +1,4 @@
-import type { ModelProvider } from "./provider";
+import type { ModelProvider } from "./providers.js";
 
 export class TestProvider implements ModelProvider {
   name = "Test Provider";

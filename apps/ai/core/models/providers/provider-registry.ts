@@ -1,8 +1,10 @@
-import type { ModelProvider } from "./provider";
-import { TestProvider } from "./test-provider";
+import type { ModelProvider } from "./providers.js";
+import { TestProvider } from "./test-provider.js";
+import { GeminiProvider } from "./gemini-provider.js";
 
 const providers: Record<string, ModelProvider> = {
   test: new TestProvider(),
+  gemini: new GeminiProvider(),
 };
 
 export function getProvider(name: string): ModelProvider {

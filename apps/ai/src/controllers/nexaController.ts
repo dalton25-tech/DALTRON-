@@ -1,6 +1,9 @@
 import type { Request, Response } from 'express'
+import { AIEngine } from '../../core/engine.js'
 
-export function chatWithNexa(req: Request, res: Response) {
+const engine = new AIEngine()
+
+export async function chatWithNexa(req: Request, res: Response) {
   const { message } = req.body
 
   if (!message || typeof message !== 'string') {
@@ -9,7 +12,17 @@ export function chatWithNexa(req: Request, res: Response) {
     })
   }
 
-  return res.json({
-    message: `Nexa Backend received: ${message}`,
-  })
+  try {
+    const result = await engine.run({
+      input: message,
+    })
+
+    return res.json(result)
+  } catch (error) {
+    console.error('Nexa AI error:', error)
+
+    return res.status(500).json({
+      error: 'Nexa AI failed to process the request.',
+    })
+  }
 }

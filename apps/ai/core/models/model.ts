@@ -1,4 +1,4 @@
-import type { ModelProvider } from "./providers/provider";
+import type { ModelProvider } from "./providers/providers.js";
 
 export interface AIModel {
   name: string;

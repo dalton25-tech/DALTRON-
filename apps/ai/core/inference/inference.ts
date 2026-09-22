@@ -2,11 +2,11 @@ import {
   supportsStreaming,
   supportsTools,
   getContextWindow,
-} from "../models/capabilities";
+} from "../models/capabilities.js";
 
-import type { AIModel } from "../models/model";
-import type { AIConfig } from "../config/config";
-import { defaultSystemPrompt } from "../prompts/system";
+import type { AIModel } from "../models/model.js";
+import type { AIConfig } from "../config/config.js";
+import { defaultSystemPrompt } from "../prompts/system.js";
 
 export class InferenceEngine {
   constructor(

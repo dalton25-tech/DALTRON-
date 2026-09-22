@@ -1,16 +1,16 @@
-import type { AIModel } from "./model";
-import type { ModelProvider } from "./providers/provider";
+import type { AIModel } from "./model.js";
+import type { ModelProvider } from "./providers/providers.js";
 
 const models: Record<string, Omit<AIModel, "provider">> = {
-  "test-model": {
-    name: "test-model",
+  "gemini-2.5-flash": {
+    name: "gemini-2.5-flash",
 
     capabilities: {
       streaming: false,
       tools: false,
     },
 
-    contextWindow: 4000,
+    contextWindow: 1000000,
   },
 };
 
