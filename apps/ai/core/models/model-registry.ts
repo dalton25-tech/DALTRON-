@@ -12,6 +12,16 @@ const models: Record<string, Omit<AIModel, "provider">> = {
 
     contextWindow: 1000000,
   },
+  "gemini-3.6-flash": {
+    name: "gemini-3.6-flash",
+
+    capabilities: {
+      streaming: false,
+      tools: false,
+    },
+
+    contextWindow: 1000000,
+  },  
 };
 
 export function getModel(
