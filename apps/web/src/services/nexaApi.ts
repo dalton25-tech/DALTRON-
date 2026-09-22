@@ -1,5 +1,8 @@
+const NEXA_API_URL =
+  import.meta.env.VITE_NEXA_API_URL || 'http://localhost:4000'
+
 export async function sendMessageToNexa(message: string) {
-  const response = await fetch('http://localhost:4000/api/nexa/chat', {
+  const response = await fetch(`${NEXA_API_URL}/api/nexa/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
