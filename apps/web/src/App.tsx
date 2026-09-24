@@ -15,9 +15,11 @@ import Footer from './components/Footer'
 import Navbar from './components/Navbar'
 import Nexa from './pages/Nexa'
 import Aria from './pages/Aria'
-import Sora from './pages/sora'
+import Sora from './pages/Sora'
 import Orbit from './pages/Orbit'
 import Luma from './pages/Luma'
+import Beacon from './pages/Beacon'
+import Keto from './pages/Keto'
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
@@ -25,13 +27,6 @@ function Home() {
   return (
     <div>
       <Navbar />
-
-      <Hero />
-      <Products />
-      <Ecosystem />
-      <Vision />
-      <Hardware />
-      <Intelligence />
 
       <Hero />
       <Products />
@@ -59,6 +54,8 @@ function App() {
         <Route path="/sora" element={<Sora />} />
         <Route path="/orbit" element={<Orbit />} />
         <Route path="/luma" element={<Luma />} />
+        <Route path="/beacon" element={<Beacon />} />
+        <Route path="/keto" element={<Keto />} />
       </Routes>
     </BrowserRouter>
   )
