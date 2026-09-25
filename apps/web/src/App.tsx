@@ -67,7 +67,7 @@ function App() {
         <Route path="/oto" element={<Oto />} />
         <Route path="/b4t" element={<B4T />} />
         <Route path="/hikari" element={<Hikari />} />
-<Route path="/gideon" element={<Gideon />} />
+<Route path="/gideon" element={<GIDEON  />}  />
       </Routes>
     </BrowserRouter>
   )
