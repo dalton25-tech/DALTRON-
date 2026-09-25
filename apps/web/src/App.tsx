@@ -25,6 +25,7 @@ import Saito from './pages/Saito'
 import Oto from './pages/Oto'
 import B4T from './pages/B4T'
 import Hikari from './pages/Hikari'
+import GIDEON from './pages/GIDEON'
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
@@ -66,6 +67,7 @@ function App() {
         <Route path="/oto" element={<Oto />} />
         <Route path="/b4t" element={<B4T />} />
         <Route path="/hikari" element={<Hikari />} />
+<Route path="/gideon" element={<Gideon />} />
       </Routes>
     </BrowserRouter>
   )
