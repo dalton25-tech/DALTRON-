@@ -22,6 +22,9 @@ import Beacon from './pages/Beacon'
 import Keto from './pages/Keto'
 import Sonic from './pages/Sonic'
 import Saito from './pages/Saito'
+import Oto from './pages/Oto'
+import B4T from './pages/B4T'
+import Hikari from './pages/Hikari'
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
@@ -60,6 +63,9 @@ function App() {
         <Route path="/keto" element={<Keto />} />
         <Route path="/sonic" element={<Sonic />} />
         <Route path="/saito" element={<Saito />} />
+        <Route path="/oto" element={<Oto />} />
+        <Route path="/b4t" element={<B4T />} />
+        <Route path="/hikari" element={<Hikari />} />
       </Routes>
     </BrowserRouter>
   )
