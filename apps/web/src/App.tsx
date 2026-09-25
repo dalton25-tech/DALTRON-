@@ -20,6 +20,8 @@ import Orbit from './pages/Orbit'
 import Luma from './pages/Luma'
 import Beacon from './pages/Beacon'
 import Keto from './pages/Keto'
+import Sonic from './pages/Sonic'
+import Saito from './pages/Saito'
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
@@ -56,6 +58,8 @@ function App() {
         <Route path="/luma" element={<Luma />} />
         <Route path="/beacon" element={<Beacon />} />
         <Route path="/keto" element={<Keto />} />
+        <Route path="/sonic" element={<Sonic />} />
+        <Route path="/saito" element={<Saito />} />
       </Routes>
     </BrowserRouter>
   )
