@@ -68,7 +68,7 @@ function Gideon() {
         <div className="gideon-panel">
           <h3>LLM Status</h3>
           <ul>
-            <li>Nexa 3<span>Connected</span></li>
+            <li>Nexa <span>Connected</span></li>
             <li>Claude <span>Connected</span></li>
             <li>Internal Models <span>4 Connected</span></li>
           </ul>
