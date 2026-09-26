@@ -1,0 +1,151 @@
+.orbit {
+  min-height: 100vh;
+  background: #050c14;
+  color: #eaf2f8;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.orbit-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #6fe3c4;
+  color: #050c14;
+  font-weight: 700;
+}
+
+.orbit-mark {
+  width: 32px;
+  height: 32px;
+  font-size: 15px;
+}
+
+.orbit-mark.large {
+  width: 72px;
+  height: 72px;
+  font-size: 30px;
+  margin-bottom: 14px;
+}
+
+.orbit-home {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.orbit-home h1 {
+  font-size: 40px;
+  margin: 0 0 10px;
+}
+
+.orbit-searchbox {
+  display: flex;
+  width: 100%;
+  max-width: 560px;
+  gap: 10px;
+}
+
+.orbit-searchbox input {
+  flex: 1;
+  background: #0a1826;
+  border: 1px solid #16324a;
+  border-radius: 999px;
+  padding: 14px 22px;
+  color: #eaf2f8;
+  font-size: 16px;
+  outline: none;
+}
+
+.orbit-searchbox button {
+  background: #6fe3c4;
+  color: #050c14;
+  border: none;
+  border-radius: 999px;
+  padding: 0 24px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.orbit-searchbox.small {
+  max-width: 480px;
+}
+
+.orbit-searchbox.small input {
+  padding: 9px 18px;
+  font-size: 14px;
+}
+
+.orbit-resultsbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 40px;
+  border-bottom: 1px solid #142a3d;
+}
+
+.orbit-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 14px 40px 0;
+  border-bottom: 1px solid #142a3d;
+}
+
+.orbit-tabs button {
+  background: none;
+  border: none;
+  color: #91a8ba;
+  font-size: 14px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.orbit-tabs button.active {
+  color: #6fe3c4;
+  border-bottom-color: #6fe3c4;
+}
+
+.orbit-results {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 30px 40px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.orbit-result-url {
+  color: #6fe3c4;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.orbit-result h3 {
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+
+.orbit-result p {
+  color: #91a8ba;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.orbit-ai-answer {
+  background: #07111d;
+  border: 1px solid #16324a;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.orbit-ai-label {
+  color: #6fe3c4;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
