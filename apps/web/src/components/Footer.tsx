@@ -50,8 +50,8 @@ function Footer() {
         </p>
 
         <div>
-          <a href="#home">Privacy</a>
-          <a href="#home">Terms</a>
+          <a href="home">Privacy</a>
+          <a href="home">Terms</a>
         </div>
       </div>
     </footer>
