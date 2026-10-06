@@ -23,7 +23,7 @@ function Hero() {
 
         <div className="hero-buttons">
           <button className="primary-button">
-            Explore DALTRON
+            Explore DALTRON 5
           </button>
 
           <button className="secondary-button">
