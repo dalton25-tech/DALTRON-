@@ -73,7 +73,7 @@ function Products() {
             AI button and fingerprint interaction.
           </p>
 
-          <button a href="/aria">Explore Aria →</button>
+          <a href="/aria">Explore Aria →</a>
         </article>
 
         <article className="product-card">

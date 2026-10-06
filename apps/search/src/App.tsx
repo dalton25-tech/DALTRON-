@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import './App.css'
 
 interface Result {
@@ -26,21 +26,16 @@ const MOCK_RESULTS: Result[] = [
 ]
 
 function App() {
-  const [query, setQuery] = useState('')
-  const [submitted, setSubmitted] = useState('')
+  const initialQuery =
+    new URLSearchParams(window.location.search).get('q') ?? ''
+
+  const [query, setQuery] = useState(initialQuery)
+  const [submitted, setSubmitted] = useState(initialQuery)
   const [mode, setMode] = useState<'web' | 'ai'>('web')
 
   function search() {
     if (query.trim()) setSubmitted(query.trim())
   }
-
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('q')
-    if (q) {
-      setQuery(q)
-      setSubmitted(q)
-    }
-  }, [])
 
   return (
     <div className="orbit">

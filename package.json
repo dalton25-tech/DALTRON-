@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p apps/ai/tsconfig.json && tsc --noEmit -p apps/browser/tsconfig.app.json && tsc --noEmit -p apps/browser/tsconfig.node.json && tsc --noEmit -p apps/search/tsconfig.app.json && tsc --noEmit -p apps/search/tsconfig.node.json && tsc --noEmit -p apps/web/tsconfig.app.json && tsc --noEmit -p apps/web/tsconfig.node.json",
     "test": "echo \"Tests not configured yet\""
   },
   "workspaces": [
@@ -23,11 +23,16 @@
     "services/*"
   ],
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "eslint": "^9.0.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
     "prettier": "^3.0.0",
-    "typescript": "^7.0.0"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
