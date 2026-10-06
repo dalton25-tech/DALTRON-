@@ -18,10 +18,10 @@ function Footer() {
         <div className="footer-links">
           <div>
             <h4>Explore</h4>
-            <a href="#products">Products</a>
-            <a href="#ecosystem">Ecosystem</a>
-            <a href="#innovation">Innovation</a>
-            <a href="#company">Company</a>
+            <a href="products">Products</a>
+            <a href="ecosystem">Ecosystem</a>
+            <a href="innovation">Innovation</a>
+            <a href="company">Company</a>
           </div>
 
           <div>
@@ -50,8 +50,8 @@ function Footer() {
         </p>
 
         <div>
-          <a href="#home">Privacy</a>
-          <a href="#home">Terms</a>
+          <a href="home">Privacy</a>
+          <a href="home">Terms</a>
         </div>
       </div>
     </footer>

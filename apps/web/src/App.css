@@ -3747,3 +3747,30 @@ p {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================
+   MOBILE OVERRIDES (fixes horizontal overflow + nav links
+   reappearing — a later unconditional .nav-links rule was
+   cancelling out the earlier mobile @media hide-rule)
+========================= */
+
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0 20px;
+  }
+
+  .nav-links {
+    display: none !important;
+  }
+
+  .hero-content,
+  .hero-content h1,
+  .hero-content p {
+    color: #ffffff;
+  }
+}
