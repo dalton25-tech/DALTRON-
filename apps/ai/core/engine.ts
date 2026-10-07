@@ -4,6 +4,7 @@ import { InferenceEngine } from "./inference/inference.js";
 import { getModel } from "./models/model-registry.js";
 import { getProvider } from "./models/providers/provider-registry.js";
 import type { AIRequest } from "./request.js";
+import { validateAIRequest } from "./request.js";
 import type { AIResponse } from "./response.js";
 
 export class AIEngine {
@@ -22,7 +23,8 @@ export class AIEngine {
   }
 
   async run(request: AIRequest): Promise<AIResponse> {
-    const output = await this.inference.generate(request.input);
+    const input = validateAIRequest(request);
+    const output = await this.inference.generate(input);
 
     return {
       output,
