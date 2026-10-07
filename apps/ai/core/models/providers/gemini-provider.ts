@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import type { ModelProvider } from "./providers.js";
+import type { ModelProvider, GenerateOptions } from "./providers.js";
 
 export class GeminiProvider implements ModelProvider {
   name = "Gemini";
@@ -20,15 +20,14 @@ export class GeminiProvider implements ModelProvider {
     });
   }
 
-  async generate(
-    systemPrompt: string,
-    input: string
-  ): Promise<string> {
+  async generate(options: GenerateOptions): Promise<string> {
     const response = await this.ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: input,
+      model: options.model,
+      contents: options.input,
       config: {
-        systemInstruction: systemPrompt,
+        systemInstruction: options.systemPrompt,
+        temperature: options.temperature,
+        maxOutputTokens: options.maxTokens,
       },
     });
 

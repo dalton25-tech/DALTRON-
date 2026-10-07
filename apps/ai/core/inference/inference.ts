@@ -16,25 +16,24 @@ export class InferenceEngine {
 
   async generate(input: string): Promise<string> {
     console.log(`Using model: ${this.config.modelName}`);
+    console.log(`Provider: ${this.config.providerName}`);
     console.log(`Temperature: ${this.config.temperature}`);
     console.log(`Max tokens: ${this.config.maxTokens}`);
     console.log(`System prompt loaded: ${defaultSystemPrompt.trim()}`);
-
     console.log(
       `Streaming supported: ${supportsStreaming(this.model)}`
     );
-
-    console.log(
-      `Tools supported: ${supportsTools(this.model)}`
-    );
-
+    console.log(`Tools supported: ${supportsTools(this.model)}`);
     console.log(
       `Context window: ${getContextWindow(this.model)}`
     );
 
-    return this.model.provider.generate(
-      defaultSystemPrompt,
-      input
-    );
+    return this.model.provider.generate({
+      model: this.model.name,
+      systemPrompt: defaultSystemPrompt,
+      input,
+      temperature: this.config.temperature,
+      maxTokens: this.config.maxTokens,
+    });
   }
 }
