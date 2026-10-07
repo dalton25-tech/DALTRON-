@@ -1,7 +1,5 @@
 import type { Request, Response } from 'express'
-import { AIEngine } from '../../core/engine.js'
-
-const engine = new AIEngine()
+import { processNexaMessage } from '../services/nexaService.js'
 
 export async function chatWithNexa(req: Request, res: Response) {
   const { message } = req.body
@@ -13,9 +11,7 @@ export async function chatWithNexa(req: Request, res: Response) {
   }
 
   try {
-    const result = await engine.run({
-      input: message,
-    })
+    const result = await processNexaMessage(message)
 
     return res.json(result)
   } catch (error) {
