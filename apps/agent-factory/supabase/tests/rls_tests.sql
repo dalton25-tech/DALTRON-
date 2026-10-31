@@ -1,0 +1,8 @@
+-- Manual checklist for a disposable test project; not a self-running test.
+-- 1. anon cannot read any private table.
+-- 2. non-members cannot read another workspace's records.
+-- 3. viewers cannot write project/task records.
+-- 4. agent_events with simulated=false is rejected.
+-- 5. authenticated users cannot write workspace_members or audit_events.
+-- 6. cross-workspace project/task references are denied.
+-- Never run unverified test fixtures against production data.

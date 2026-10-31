@@ -1,0 +1,1 @@
+import type { ApiRequest, ApiResponse } from "./_lib/types"; export default function handler(_req:ApiRequest,res:ApiResponse){res.setHeader("Cache-Control","no-store");return res.status(200).json({ok:true,service:"daltron-agent-factory-api",mode:"prototype",agentExecution:false});}
