@@ -11,11 +11,13 @@
     "build": "npm run build:all",
     "build:all": "npm run build:web",
     "build:web": "npm --workspace apps/web run build",
+    "build:ai": "npm --workspace apps/ai run build",
+    "start:ai": "npm --workspace apps/ai run start",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit -p apps/ai/tsconfig.json && tsc --noEmit -p apps/browser/tsconfig.app.json && tsc --noEmit -p apps/browser/tsconfig.node.json && tsc --noEmit -p apps/search/tsconfig.app.json && tsc --noEmit -p apps/search/tsconfig.node.json && tsc --noEmit -p apps/web/tsconfig.app.json && tsc --noEmit -p apps/web/tsconfig.node.json",
-    "test": "echo \"Tests not configured yet\""
+    "test": "npm --workspace apps/ai run test"
   },
   "workspaces": [
     "apps/*",

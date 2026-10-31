@@ -2,5 +2,10 @@
   "name": "@daltron/ai",
   "version": "1.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && node dist/src/server.js",
+    "test": "npm run build && node --test \"dist/tests/*.test.js\""
+  }
 }

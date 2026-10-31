@@ -1,7 +1,12 @@
-const NEXA_API_URL =
-  import.meta.env.VITE_NEXA_API_URL || 'http://localhost:4000'
+const NEXA_API_URL = import.meta.env.VITE_NEXA_API_URL || 'http://localhost:4000';
 
-export async function sendMessageToNexa(message: string) {
+export interface NexaReply {
+  output: string;
+  model: string;
+  provider: string;
+}
+
+export async function sendMessageToNexa(message: string): Promise<NexaReply> {
   const response = await fetch(`${NEXA_API_URL}/api/nexa/chat`, {
     method: 'POST',
     headers: {
@@ -10,11 +15,20 @@ export async function sendMessageToNexa(message: string) {
     body: JSON.stringify({
       message,
     }),
-  })
+  });
 
   if (!response.ok) {
-    throw new Error('Failed to connect to Nexa Backend')
+    let detail = 'Failed to connect to Nexa Backend';
+
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) detail = body.error;
+    } catch {
+      // Response had no JSON body; keep the generic message.
+    }
+
+    throw new Error(detail);
   }
 
-  return response.json()
+  return (await response.json()) as NexaReply;
 }

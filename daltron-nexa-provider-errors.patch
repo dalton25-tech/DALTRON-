@@ -1,0 +1,1233 @@
+From 589edec86b5788e374408427b77fc4fafe04f225 Mon Sep 17 00:00:00 2001
+From: audit <audit@local>
+Date: Wed, 21 Oct 2026 21:10:02 +0000
+Subject: [PATCH] Nexa AI: provider error handling (typed errors, retry,
+ timeout), env loading from repo root, route/controller/engine tests
+
+---
+ .env.example                                  |   4 +
+ apps/ai/core/config/config.ts                 |  16 +++
+ apps/ai/core/engine.ts                        |  31 +++-
+ apps/ai/core/errors.ts                        | 109 ++++++++++++++
+ apps/ai/core/inference/inference.ts           |  74 +++++++++-
+ .../core/models/providers/gemini-provider.ts  |  28 ++--
+ apps/ai/src/app.ts                            |  60 ++++++++
+ apps/ai/src/controllers/nexaController.ts     |  28 ++++
+ apps/ai/src/env-setup.ts                      |   5 +
+ apps/ai/src/env.ts                            |  45 ++++++
+ apps/ai/src/server.ts                         |  26 +---
+ apps/ai/src/services/nexaService.ts           |   6 +
+ apps/ai/tests/engine-errors.test.ts           |  55 +++++++
+ apps/ai/tests/env.test.ts                     |  35 +++++
+ apps/ai/tests/errors.test.ts                  |  57 ++++++++
+ apps/ai/tests/helpers.ts                      |  36 +++++
+ apps/ai/tests/inference.test.ts               |  82 +++++++++++
+ apps/ai/tests/nexa-controller.test.ts         | 135 ++++++++++++++++++
+ apps/ai/tests/nexa-route.integration.test.ts  | 117 +++++++++++++++
+ docs/AI_BACKEND.md                            |  34 +++++
+ 20 files changed, 935 insertions(+), 48 deletions(-)
+ create mode 100644 apps/ai/core/errors.ts
+ create mode 100644 apps/ai/src/app.ts
+ create mode 100644 apps/ai/src/env-setup.ts
+ create mode 100644 apps/ai/src/env.ts
+ create mode 100644 apps/ai/tests/engine-errors.test.ts
+ create mode 100644 apps/ai/tests/env.test.ts
+ create mode 100644 apps/ai/tests/errors.test.ts
+ create mode 100644 apps/ai/tests/helpers.ts
+ create mode 100644 apps/ai/tests/inference.test.ts
+ create mode 100644 apps/ai/tests/nexa-controller.test.ts
+ create mode 100644 apps/ai/tests/nexa-route.integration.test.ts
+ create mode 100644 docs/AI_BACKEND.md
+
+diff --git a/.env.example b/.env.example
+index 3406c61..48ecfa6 100644
+--- a/.env.example
++++ b/.env.example
+@@ -9,6 +9,10 @@ DALTRON_AI_PROVIDER=gemini
+ DALTRON_AI_MODEL=gemini-3.6-flash
+ DALTRON_AI_TEMPERATURE=0.7
+ DALTRON_AI_MAX_TOKENS=1000
++# Provider call limits: timeout per attempt, retries for transient errors (429/5xx), first retry delay (doubles each retry)
++DALTRON_AI_TIMEOUT_MS=30000
++DALTRON_AI_MAX_RETRIES=2
++DALTRON_AI_RETRY_BASE_DELAY_MS=500
+ PORT=4000
+ # Comma-separated browser origins allowed to call the API
+ CORS_ORIGIN=http://localhost:5173
+diff --git a/apps/ai/core/config/config.ts b/apps/ai/core/config/config.ts
+index bdf4d39..9ad1ee8 100644
+--- a/apps/ai/core/config/config.ts
++++ b/apps/ai/core/config/config.ts
+@@ -3,6 +3,19 @@ export interface AIConfig {
+   providerName: string;
+   temperature: number;
+   maxTokens: number;
++  timeoutMs: number;
++  maxRetries: number;
++  retryBaseDelayMs: number;
++}
++
++function numberFromEnv(name: string, fallback: number): number {
++  const raw = process.env[name];
++
++  if (raw === undefined || raw.trim() === "") return fallback;
++
++  const value = Number(raw);
++
++  return Number.isFinite(value) && value >= 0 ? value : fallback;
+ }
+ 
+ export const defaultAIConfig: AIConfig = {
+@@ -10,4 +23,7 @@ export const defaultAIConfig: AIConfig = {
+   providerName: process.env.DALTRON_AI_PROVIDER ?? "gemini",
+   temperature: Number(process.env.DALTRON_AI_TEMPERATURE ?? "0.7"),
+   maxTokens: Number(process.env.DALTRON_AI_MAX_TOKENS ?? "1000"),
++  timeoutMs: numberFromEnv("DALTRON_AI_TIMEOUT_MS", 30000),
++  maxRetries: Math.floor(numberFromEnv("DALTRON_AI_MAX_RETRIES", 2)),
++  retryBaseDelayMs: numberFromEnv("DALTRON_AI_RETRY_BASE_DELAY_MS", 500),
+ };
+diff --git a/apps/ai/core/engine.ts b/apps/ai/core/engine.ts
+index 73916ba..2e37c6a 100644
+--- a/apps/ai/core/engine.ts
++++ b/apps/ai/core/engine.ts
+@@ -1,8 +1,11 @@
+ import type { AIConfig } from "./config/config.js";
+ import { defaultAIConfig } from "./config/config.js";
++import { AIProviderError } from "./errors.js";
+ import { InferenceEngine } from "./inference/inference.js";
+ import { getModel } from "./models/model-registry.js";
+ import { getProvider } from "./models/providers/provider-registry.js";
++import type { AIModel } from "./models/model.js";
++import type { ModelProvider } from "./models/providers/providers.js";
+ import type { AIRequest } from "./request.js";
+ import { validateAIRequest } from "./request.js";
+ import type { AIResponse } from "./response.js";
+@@ -10,16 +13,30 @@ import type { AIResponse } from "./response.js";
+ export class AIEngine {
+   private inference: InferenceEngine;
+ 
++  // `provider` lets callers (mainly tests) supply a provider instance directly
++  // instead of looking one up by name.
+   constructor(
+-    private config: AIConfig = defaultAIConfig
++    private config: AIConfig = defaultAIConfig,
++    provider?: ModelProvider
+   ) {
+-    const provider = getProvider(config.providerName);
+-    const model = getModel(config.modelName, provider);
++    let model: AIModel;
+ 
+-    this.inference = new InferenceEngine(
+-      model,
+-      config
+-    );
++    try {
++      model = getModel(
++        config.modelName,
++        provider ?? getProvider(config.providerName)
++      );
++    } catch (error) {
++      if (error instanceof AIProviderError) throw error;
++
++      throw new AIProviderError(
++        "config",
++        "The AI provider or model is not configured correctly.",
++        { cause: error }
++      );
++    }
++
++    this.inference = new InferenceEngine(model, config);
+   }
+ 
+   async run(request: AIRequest): Promise<AIResponse> {
+diff --git a/apps/ai/core/errors.ts b/apps/ai/core/errors.ts
+new file mode 100644
+index 0000000..296fa2b
+--- /dev/null
++++ b/apps/ai/core/errors.ts
+@@ -0,0 +1,109 @@
++export type AIErrorCode =
++  | "config"
++  | "auth"
++  | "model_not_found"
++  | "rate_limit"
++  | "timeout"
++  | "unavailable"
++  | "bad_request"
++  | "unknown";
++
++// Only transient failures are retried. Timeouts are deliberately not retried so
++// a slow request that is still running upstream is not duplicated.
++const RETRYABLE_CODES: ReadonlySet<AIErrorCode> = new Set<AIErrorCode>([
++  "rate_limit",
++  "unavailable",
++]);
++
++export class AIProviderError extends Error {
++  readonly code: AIErrorCode;
++  readonly status: number | undefined;
++
++  constructor(
++    code: AIErrorCode,
++    message: string,
++    options: { status?: number; cause?: unknown } = {}
++  ) {
++    super(
++      message,
++      options.cause === undefined ? undefined : { cause: options.cause }
++    );
++
++    this.name = "AIProviderError";
++    this.code = code;
++    this.status = options.status;
++  }
++
++  get retryable(): boolean {
++    return RETRYABLE_CODES.has(this.code);
++  }
++}
++
++export function codeFromStatus(status: number): AIErrorCode {
++  if (status === 400) return "bad_request";
++  if (status === 401 || status === 403) return "auth";
++  if (status === 404) return "model_not_found";
++  if (status === 408 || status === 504) return "timeout";
++  if (status === 429) return "rate_limit";
++  if (status >= 500) return "unavailable";
++
++  return "unknown";
++}
++
++const NETWORK_ERROR_CODES = new Set([
++  "ECONNRESET",
++  "ECONNREFUSED",
++  "ENOTFOUND",
++  "ETIMEDOUT",
++  "EAI_AGAIN",
++]);
++
++function readStatus(error: unknown): number | undefined {
++  if (typeof error === "object" && error !== null && "status" in error) {
++    const status = (error as { status: unknown }).status;
++
++    if (typeof status === "number" && Number.isInteger(status)) {
++      return status;
++    }
++  }
++
++  return undefined;
++}
++
++function isNetworkError(error: unknown, depth = 0): boolean {
++  if (!(error instanceof Error) || depth > 2) return false;
++
++  const code = (error as { code?: unknown }).code;
++
++  if (typeof code === "string" && NETWORK_ERROR_CODES.has(code)) return true;
++  if (error.message.includes("fetch failed")) return true;
++
++  return isNetworkError(error.cause, depth + 1);
++}
++
++// Converts anything a provider throws into an AIProviderError. The message never
++// includes upstream response text; the original error is kept as `cause` for
++// server-side logging only.
++export function toProviderError(error: unknown): AIProviderError {
++  if (error instanceof AIProviderError) return error;
++
++  const status = readStatus(error);
++
++  if (status !== undefined) {
++    return new AIProviderError(
++      codeFromStatus(status),
++      `AI provider request failed with status ${status}.`,
++      { status, cause: error }
++    );
++  }
++
++  if (isNetworkError(error)) {
++    return new AIProviderError("unavailable", "Could not reach the AI provider.", {
++      cause: error,
++    });
++  }
++
++  return new AIProviderError("unknown", "AI provider request failed.", {
++    cause: error,
++  });
++}
+diff --git a/apps/ai/core/inference/inference.ts b/apps/ai/core/inference/inference.ts
+index 6d1e942..a531f1b 100644
+--- a/apps/ai/core/inference/inference.ts
++++ b/apps/ai/core/inference/inference.ts
+@@ -4,10 +4,45 @@ import {
+   getContextWindow,
+ } from "../models/capabilities.js";
+ 
++import { AIProviderError, toProviderError } from "../errors.js";
+ import type { AIModel } from "../models/model.js";
+ import type { AIConfig } from "../config/config.js";
+ import { defaultSystemPrompt } from "../prompts/system.js";
+ 
++function sleep(ms: number): Promise<void> {
++  return new Promise((resolve) => setTimeout(resolve, ms));
++}
++
++// Rejects with a "timeout" error if `run` takes longer than `timeoutMs`.
++// Note: this stops waiting; it cannot cancel the underlying provider request.
++function withTimeout<T>(run: () => Promise<T>, timeoutMs: number): Promise<T> {
++  if (!(timeoutMs > 0)) return Promise.resolve().then(run);
++
++  return new Promise<T>((resolve, reject) => {
++    const timer = setTimeout(() => {
++      reject(
++        new AIProviderError(
++          "timeout",
++          `AI provider did not respond within ${timeoutMs} ms.`
++        )
++      );
++    }, timeoutMs);
++
++    Promise.resolve()
++      .then(run)
++      .then(
++        (value) => {
++          clearTimeout(timer);
++          resolve(value);
++        },
++        (error: unknown) => {
++          clearTimeout(timer);
++          reject(error);
++        }
++      );
++  });
++}
++
+ export class InferenceEngine {
+   constructor(
+     private model: AIModel,
+@@ -28,12 +63,37 @@ export class InferenceEngine {
+       `Context window: ${getContextWindow(this.model)}`
+     );
+ 
+-    return this.model.provider.generate({
+-      model: this.model.name,
+-      systemPrompt: defaultSystemPrompt,
+-      input,
+-      temperature: this.config.temperature,
+-      maxTokens: this.config.maxTokens,
+-    });
++    const call = () =>
++      this.model.provider.generate({
++        model: this.model.name,
++        systemPrompt: defaultSystemPrompt,
++        input,
++        temperature: this.config.temperature,
++        maxTokens: this.config.maxTokens,
++      });
++
++    let attempt = 0;
++
++    for (;;) {
++      try {
++        return await withTimeout(call, this.config.timeoutMs);
++      } catch (raw) {
++        const error = toProviderError(raw);
++
++        if (!error.retryable || attempt >= this.config.maxRetries) {
++          throw error;
++        }
++
++        attempt += 1;
++
++        const delayMs = this.config.retryBaseDelayMs * 2 ** (attempt - 1);
++
++        console.warn(
++          `AI provider error (${error.code}); retry ${attempt}/${this.config.maxRetries} in ${delayMs} ms.`
++        );
++
++        await sleep(delayMs);
++      }
++    }
+   }
+ }
+diff --git a/apps/ai/core/models/providers/gemini-provider.ts b/apps/ai/core/models/providers/gemini-provider.ts
+index f36328f..66ccdf5 100644
+--- a/apps/ai/core/models/providers/gemini-provider.ts
++++ b/apps/ai/core/models/providers/gemini-provider.ts
+@@ -1,4 +1,5 @@
+ import { GoogleGenAI } from "@google/genai";
++import { AIProviderError, toProviderError } from "../../errors.js";
+ import type { ModelProvider, GenerateOptions } from "./providers.js";
+ 
+ export class GeminiProvider implements ModelProvider {
+@@ -10,7 +11,8 @@ export class GeminiProvider implements ModelProvider {
+     const apiKey = process.env.GEMINI_API_KEY;
+ 
+     if (!apiKey) {
+-      throw new Error(
++      throw new AIProviderError(
++        "config",
+         "GEMINI_API_KEY is not set in the environment."
+       );
+     }
+@@ -21,16 +23,20 @@ export class GeminiProvider implements ModelProvider {
+   }
+ 
+   async generate(options: GenerateOptions): Promise<string> {
+-    const response = await this.ai.models.generateContent({
+-      model: options.model,
+-      contents: options.input,
+-      config: {
+-        systemInstruction: options.systemPrompt,
+-        temperature: options.temperature,
+-        maxOutputTokens: options.maxTokens,
+-      },
+-    });
++    try {
++      const response = await this.ai.models.generateContent({
++        model: options.model,
++        contents: options.input,
++        config: {
++          systemInstruction: options.systemPrompt,
++          temperature: options.temperature,
++          maxOutputTokens: options.maxTokens,
++        },
++      });
+ 
+-    return response.text ?? "";
++      return response.text ?? "";
++    } catch (error) {
++      throw toProviderError(error);
++    }
+   }
+ }
+diff --git a/apps/ai/src/app.ts b/apps/ai/src/app.ts
+new file mode 100644
+index 0000000..4e253f0
+--- /dev/null
++++ b/apps/ai/src/app.ts
+@@ -0,0 +1,60 @@
++import express from 'express';
++import type { ErrorRequestHandler, Express } from 'express';
++import cors from 'cors';
++import nexaRoutes from './routes/nexaRoutes.js';
++
++export interface AppOptions {
++  allowedOrigins?: string[];
++}
++
++function originsFromEnv(): string[] {
++  // Comma-separated list of allowed browser origins. Defaults to the Vite dev server.
++  return (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
++    .split(',')
++    .map((origin) => origin.trim())
++    .filter(Boolean);
++}
++
++// Returns JSON (never an HTML stack trace) for malformed or oversized request bodies.
++// Express identifies error handlers by their four-argument signature.
++// eslint-disable-next-line @typescript-eslint/no-unused-vars
++const handleRequestErrors: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
++  const status =
++    typeof error === 'object' &&
++    error !== null &&
++    'status' in error &&
++    typeof error.status === 'number'
++      ? error.status
++      : 500;
++
++  if (status === 413) {
++    return res.status(413).json({ error: 'Request body is too large.' });
++  }
++
++  if (status === 400) {
++    return res.status(400).json({ error: 'Invalid request body.' });
++  }
++
++  console.error('Unhandled request error:', error);
++
++  return res.status(500).json({ error: 'Internal server error.' });
++};
++
++export function createApp(options: AppOptions = {}): Express {
++  const app = express();
++
++  app.use(cors({ origin: options.allowedOrigins ?? originsFromEnv() }));
++  app.use(express.json({ limit: '16kb' }));
++
++  app.get('/health', (_req, res) => {
++    res.json({
++      status: 'online',
++      system: 'Nexa Backend',
++    });
++  });
++
++  app.use('/api/nexa', nexaRoutes);
++  app.use(handleRequestErrors);
++
++  return app;
++}
+diff --git a/apps/ai/src/controllers/nexaController.ts b/apps/ai/src/controllers/nexaController.ts
+index 1dd091d..cfb5d2c 100644
+--- a/apps/ai/src/controllers/nexaController.ts
++++ b/apps/ai/src/controllers/nexaController.ts
+@@ -1,8 +1,23 @@
+ import type { Request, Response } from 'express';
++import { AIProviderError } from '../../core/errors.js';
++import type { AIErrorCode } from '../../core/errors.js';
+ import { processNexaMessage } from '../services/nexaService.js';
+ 
+ export const MAX_MESSAGE_LENGTH = 4000;
+ 
++// Client-facing responses per failure type. These never include upstream
++// provider text; details are logged on the server only.
++const PROVIDER_ERROR_RESPONSES: Record<AIErrorCode, { status: number; error: string }> = {
++  config: { status: 503, error: 'Nexa is not configured on the server.' },
++  auth: { status: 502, error: 'Nexa could not authenticate with its AI provider.' },
++  model_not_found: { status: 502, error: 'The configured AI model is unavailable.' },
++  rate_limit: { status: 429, error: 'Nexa is receiving too many requests. Try again shortly.' },
++  timeout: { status: 504, error: 'The AI provider took too long to respond.' },
++  unavailable: { status: 503, error: 'The AI provider is temporarily unavailable.' },
++  bad_request: { status: 502, error: 'The AI provider rejected the request.' },
++  unknown: { status: 502, error: 'The AI provider failed to process the request.' },
++};
++
+ export async function chatWithNexa(req: Request, res: Response) {
+   const message: unknown = req.body?.message;
+ 
+@@ -23,6 +38,19 @@ export async function chatWithNexa(req: Request, res: Response) {
+ 
+     return res.json(result);
+   } catch (error) {
++    if (error instanceof AIProviderError) {
++      const status = error.status === undefined ? '' : ` ${error.status}`;
++
++      console.error(`Nexa AI provider error [${error.code}${status}]:`, error.message, error.cause ?? '');
++
++      const response = PROVIDER_ERROR_RESPONSES[error.code];
++
++      return res.status(response.status).json({
++        error: response.error,
++        code: error.code,
++      });
++    }
++
+     console.error('Nexa AI error:', error);
+ 
+     return res.status(500).json({
+diff --git a/apps/ai/src/env-setup.ts b/apps/ai/src/env-setup.ts
+new file mode 100644
+index 0000000..3847f25
+--- /dev/null
++++ b/apps/ai/src/env-setup.ts
+@@ -0,0 +1,5 @@
++// Imported first by server.ts so environment variables are loaded before any
++// module that reads process.env at import time (for example core/config).
++import { loadEnvFiles } from './env.js';
++
++loadEnvFiles();
+diff --git a/apps/ai/src/env.ts b/apps/ai/src/env.ts
+new file mode 100644
+index 0000000..3a13e21
+--- /dev/null
++++ b/apps/ai/src/env.ts
+@@ -0,0 +1,45 @@
++import { existsSync, readFileSync } from 'node:fs';
++import path from 'node:path';
++
++function isRepoRoot(dir: string): boolean {
++  if (existsSync(path.join(dir, '.git'))) return true;
++
++  try {
++    const pkg = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as {
++      workspaces?: unknown;
++    };
++
++    return pkg.workspaces !== undefined;
++  } catch {
++    return false;
++  }
++}
++
++/**
++ * Loads `.env` files starting at `startDir` and walking up to the repository
++ * root (a directory with `.git` or a workspaces `package.json`). `npm --workspace`
++ * runs scripts from `apps/ai`, so the repo-root `.env` must be found from there.
++ * Values already present in `process.env` (including ones set by a nearer file) win.
++ * Returns the files that were loaded.
++ */
++export function loadEnvFiles(startDir: string = process.cwd()): string[] {
++  const loaded: string[] = [];
++  let dir = path.resolve(startDir);
++
++  for (;;) {
++    const file = path.join(dir, '.env');
++
++    if (existsSync(file)) {
++      process.loadEnvFile(file);
++      loaded.push(file);
++    }
++
++    const parent = path.dirname(dir);
++
++    if (isRepoRoot(dir) || parent === dir) break;
++
++    dir = parent;
++  }
++
++  return loaded;
++}
+diff --git a/apps/ai/src/server.ts b/apps/ai/src/server.ts
+index 9c2f6c5..93b53ef 100644
+--- a/apps/ai/src/server.ts
++++ b/apps/ai/src/server.ts
+@@ -1,27 +1,7 @@
+-import 'dotenv/config';
+-import express from 'express';
+-import cors from 'cors';
+-import nexaRoutes from './routes/nexaRoutes.js';
++import './env-setup.js';
++import { createApp } from './app.js';
+ 
+-const app = express();
+-
+-// Comma-separated list of allowed browser origins. Defaults to the Vite dev server.
+-const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
+-  .split(',')
+-  .map((origin) => origin.trim())
+-  .filter(Boolean);
+-
+-app.use(cors({ origin: allowedOrigins }));
+-app.use(express.json({ limit: '16kb' }));
+-
+-app.get('/health', (_req, res) => {
+-  res.json({
+-    status: 'online',
+-    system: 'Nexa Backend',
+-  });
+-});
+-
+-app.use('/api/nexa', nexaRoutes);
++const app = createApp();
+ 
+ const PORT = Number(process.env.PORT ?? 4000);
+ 
+diff --git a/apps/ai/src/services/nexaService.ts b/apps/ai/src/services/nexaService.ts
+index 80b5dc7..52ed294 100644
+--- a/apps/ai/src/services/nexaService.ts
++++ b/apps/ai/src/services/nexaService.ts
+@@ -9,6 +9,12 @@ function getEngine(): AIEngine {
+   return engine;
+ }
+ 
++// Replaces the engine (pass undefined to reset). Used by tests to inject a
++// fake provider; production code never calls this.
++export function setNexaEngine(next: AIEngine | undefined): void {
++  engine = next;
++}
++
+ export async function processNexaMessage(message: string) {
+   return getEngine().run({
+     input: message,
+diff --git a/apps/ai/tests/engine-errors.test.ts b/apps/ai/tests/engine-errors.test.ts
+new file mode 100644
+index 0000000..a50d5e4
+--- /dev/null
++++ b/apps/ai/tests/engine-errors.test.ts
+@@ -0,0 +1,55 @@
++import assert from 'node:assert/strict';
++import { afterEach, beforeEach, mock, test } from 'node:test';
++import { AIEngine } from '../core/engine.js';
++import { AIProviderError } from '../core/errors.js';
++import { fakeProvider, fastConfig, upstreamError } from './helpers.js';
++
++beforeEach(() => {
++  mock.method(console, 'log', () => {});
++});
++
++afterEach(() => {
++  mock.restoreAll();
++});
++
++test('AIEngine reports an unknown provider name as a config error', () => {
++  assert.throws(
++    () => new AIEngine({ ...fastConfig, providerName: 'does-not-exist' }),
++    (error: unknown) => error instanceof AIProviderError && error.code === 'config',
++  );
++});
++
++test('AIEngine reports an unknown model name as a config error', () => {
++  assert.throws(
++    () =>
++      new AIEngine(
++        { ...fastConfig, modelName: 'no-such-model' },
++        fakeProvider(async () => 'unused'),
++      ),
++    (error: unknown) => error instanceof AIProviderError && error.code === 'config',
++  );
++});
++
++test('AIEngine uses an injected provider and returns the response shape', async () => {
++  const engine = new AIEngine(fastConfig, fakeProvider(async (options) => `echo: ${options.input}`));
++
++  assert.deepEqual(await engine.run({ input: '  hello  ' }), {
++    output: 'echo: hello',
++    model: 'gemini-3.6-flash',
++    provider: 'fake',
++  });
++});
++
++test('AIEngine surfaces provider failures as AIProviderError', async () => {
++  const engine = new AIEngine(
++    fastConfig,
++    fakeProvider(async () => {
++      throw upstreamError(404);
++    }),
++  );
++
++  await assert.rejects(
++    () => engine.run({ input: 'hi' }),
++    (error: unknown) => error instanceof AIProviderError && error.code === 'model_not_found',
++  );
++});
+diff --git a/apps/ai/tests/env.test.ts b/apps/ai/tests/env.test.ts
+new file mode 100644
+index 0000000..0c3060d
+--- /dev/null
++++ b/apps/ai/tests/env.test.ts
+@@ -0,0 +1,35 @@
++import assert from 'node:assert/strict';
++import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import path from 'node:path';
++import { after, test } from 'node:test';
++import { loadEnvFiles } from '../src/env.js';
++
++const KEYS = ['DALTRON_TEST_ROOT_ONLY', 'DALTRON_TEST_SHARED', 'DALTRON_TEST_OUTSIDE'];
++const tmp = mkdtempSync(path.join(tmpdir(), 'daltron-env-'));
++
++after(() => {
++  rmSync(tmp, { recursive: true, force: true });
++
++  for (const key of KEYS) delete process.env[key];
++});
++
++test('loadEnvFiles finds the repo-root .env from a workspace directory', () => {
++  const repo = path.join(tmp, 'repo');
++  const workspace = path.join(repo, 'apps', 'ai');
++
++  mkdirSync(workspace, { recursive: true });
++  writeFileSync(path.join(tmp, '.env'), 'DALTRON_TEST_OUTSIDE=outside\n');
++  writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
++  writeFileSync(path.join(repo, '.env'), 'DALTRON_TEST_ROOT_ONLY=1\nDALTRON_TEST_SHARED=root\n');
++  writeFileSync(path.join(workspace, '.env'), 'DALTRON_TEST_SHARED=workspace\n');
++
++  const loaded = loadEnvFiles(workspace);
++
++  assert.deepEqual(loaded, [path.join(workspace, '.env'), path.join(repo, '.env')]);
++  assert.equal(process.env.DALTRON_TEST_ROOT_ONLY, '1');
++  // The nearer file wins over the repo-root file.
++  assert.equal(process.env.DALTRON_TEST_SHARED, 'workspace');
++  // Directories above the repo root are never read.
++  assert.equal(process.env.DALTRON_TEST_OUTSIDE, undefined);
++});
+diff --git a/apps/ai/tests/errors.test.ts b/apps/ai/tests/errors.test.ts
+new file mode 100644
+index 0000000..9e16963
+--- /dev/null
++++ b/apps/ai/tests/errors.test.ts
+@@ -0,0 +1,57 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { AIProviderError, toProviderError } from '../core/errors.js';
++import type { AIErrorCode } from '../core/errors.js';
++import { upstreamError } from './helpers.js';
++
++const statusCases: Array<[number, AIErrorCode, boolean]> = [
++  [400, 'bad_request', false],
++  [401, 'auth', false],
++  [403, 'auth', false],
++  [404, 'model_not_found', false],
++  [408, 'timeout', false],
++  [429, 'rate_limit', true],
++  [500, 'unavailable', true],
++  [503, 'unavailable', true],
++  [504, 'timeout', false],
++  [418, 'unknown', false],
++];
++
++for (const [status, code, retryable] of statusCases) {
++  test(`toProviderError maps status ${status} to ${code} (retryable: ${retryable})`, () => {
++    const error = toProviderError(upstreamError(status));
++
++    assert.equal(error.code, code);
++    assert.equal(error.status, status);
++    assert.equal(error.retryable, retryable);
++  });
++}
++
++test('toProviderError keeps upstream text out of the message but preserves the cause', () => {
++  const original = upstreamError(404, 'secret upstream detail');
++  const error = toProviderError(original);
++
++  assert.ok(!error.message.includes('secret upstream detail'));
++  assert.equal(error.cause, original);
++});
++
++test('toProviderError treats network failures as retryable "unavailable"', () => {
++  const reset = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
++  const fetchFailed = new TypeError('fetch failed');
++
++  assert.equal(toProviderError(reset).code, 'unavailable');
++  assert.equal(toProviderError(fetchFailed).code, 'unavailable');
++  assert.equal(toProviderError(fetchFailed).retryable, true);
++});
++
++test('toProviderError returns existing AIProviderError instances unchanged', () => {
++  const original = new AIProviderError('config', 'not configured');
++
++  assert.equal(toProviderError(original), original);
++});
++
++test('toProviderError wraps unknown errors and non-Error values as "unknown"', () => {
++  assert.equal(toProviderError(new Error('boom')).code, 'unknown');
++  assert.equal(toProviderError('a string').code, 'unknown');
++  assert.equal(toProviderError(undefined).retryable, false);
++});
+diff --git a/apps/ai/tests/helpers.ts b/apps/ai/tests/helpers.ts
+new file mode 100644
+index 0000000..415f6ee
+--- /dev/null
++++ b/apps/ai/tests/helpers.ts
+@@ -0,0 +1,36 @@
++import type { AIConfig } from '../core/config/config.js';
++import type { GenerateOptions, ModelProvider } from '../core/models/providers/providers.js';
++
++// Fast, deterministic settings for tests: no retries unless a test opts in.
++export const fastConfig: AIConfig = {
++  modelName: 'gemini-3.6-flash',
++  providerName: 'fake',
++  temperature: 0,
++  maxTokens: 10,
++  timeoutMs: 1000,
++  maxRetries: 0,
++  retryBaseDelayMs: 1,
++};
++
++export type FakeProvider = ModelProvider & { calls: number };
++
++export function fakeProvider(
++  handler: (options: GenerateOptions, call: number) => Promise<string>,
++): FakeProvider {
++  const provider: FakeProvider = {
++    name: 'Fake',
++    calls: 0,
++    generate(options) {
++      provider.calls += 1;
++
++      return handler(options, provider.calls);
++    },
++  };
++
++  return provider;
++}
++
++// An error shaped like the ones the Gemini SDK throws (it carries a numeric status).
++export function upstreamError(status: number, message = 'upstream detail'): Error {
++  return Object.assign(new Error(message), { status });
++}
+diff --git a/apps/ai/tests/inference.test.ts b/apps/ai/tests/inference.test.ts
+new file mode 100644
+index 0000000..e2285ef
+--- /dev/null
++++ b/apps/ai/tests/inference.test.ts
+@@ -0,0 +1,82 @@
++import assert from 'node:assert/strict';
++import { afterEach, beforeEach, mock, test } from 'node:test';
++import { AIProviderError } from '../core/errors.js';
++import { InferenceEngine } from '../core/inference/inference.js';
++import type { AIModel } from '../core/models/model.js';
++import { fakeProvider, fastConfig, upstreamError } from './helpers.js';
++import type { FakeProvider } from './helpers.js';
++
++beforeEach(() => {
++  // The inference engine logs on every call; keep test output readable.
++  mock.method(console, 'log', () => {});
++  mock.method(console, 'warn', () => {});
++});
++
++afterEach(() => {
++  mock.restoreAll();
++});
++
++function engineFor(provider: FakeProvider, overrides: Partial<typeof fastConfig> = {}) {
++  const model: AIModel = {
++    name: 'test-model',
++    provider,
++    capabilities: { streaming: false, tools: false },
++    contextWindow: 1000,
++  };
++
++  return new InferenceEngine(model, { ...fastConfig, ...overrides });
++}
++
++test('returns the provider output on success without retrying', async () => {
++  const provider = fakeProvider(async () => 'ok');
++
++  assert.equal(await engineFor(provider).generate('hi'), 'ok');
++  assert.equal(provider.calls, 1);
++});
++
++test('retries transient 503 errors and then succeeds', async () => {
++  const provider = fakeProvider(async (_options, call) => {
++    if (call < 3) throw upstreamError(503);
++
++    return 'recovered';
++  });
++
++  const output = await engineFor(provider, { maxRetries: 2 }).generate('hi');
++
++  assert.equal(output, 'recovered');
++  assert.equal(provider.calls, 3);
++});
++
++test('gives up after maxRetries and throws the normalized error', async () => {
++  const provider = fakeProvider(async () => {
++    throw upstreamError(429);
++  });
++
++  await assert.rejects(
++    () => engineFor(provider, { maxRetries: 2 }).generate('hi'),
++    (error: unknown) =>
++      error instanceof AIProviderError && error.code === 'rate_limit',
++  );
++  assert.equal(provider.calls, 3);
++});
++
++test('does not retry non-transient errors (401, 404)', async () => {
++  for (const status of [401, 404]) {
++    const provider = fakeProvider(async () => {
++      throw upstreamError(status);
++    });
++
++    await assert.rejects(() => engineFor(provider, { maxRetries: 2 }).generate('hi'));
++    assert.equal(provider.calls, 1, `status ${status} should not be retried`);
++  }
++});
++
++test('times out a provider that never responds, without retrying', async () => {
++  const provider = fakeProvider(() => new Promise<string>(() => {}));
++
++  await assert.rejects(
++    () => engineFor(provider, { timeoutMs: 20, maxRetries: 2 }).generate('hi'),
++    (error: unknown) => error instanceof AIProviderError && error.code === 'timeout',
++  );
++  assert.equal(provider.calls, 1);
++});
+diff --git a/apps/ai/tests/nexa-controller.test.ts b/apps/ai/tests/nexa-controller.test.ts
+new file mode 100644
+index 0000000..12d3984
+--- /dev/null
++++ b/apps/ai/tests/nexa-controller.test.ts
+@@ -0,0 +1,135 @@
++import assert from 'node:assert/strict';
++import { afterEach, beforeEach, mock, test } from 'node:test';
++import type { Request, Response } from 'express';
++import { AIEngine } from '../core/engine.js';
++import { AIProviderError } from '../core/errors.js';
++import { chatWithNexa, MAX_MESSAGE_LENGTH } from '../src/controllers/nexaController.js';
++import { setNexaEngine } from '../src/services/nexaService.js';
++import { fakeProvider, fastConfig, upstreamError } from './helpers.js';
++import type { FakeProvider } from './helpers.js';
++
++interface Captured {
++  statusCode: number;
++  body: unknown;
++}
++
++// A minimal stand-in for an Express response that records what was sent.
++async function callChat(body: unknown): Promise<Captured> {
++  const captured: Captured = { statusCode: 200, body: undefined };
++  const res = {
++    status(code: number) {
++      captured.statusCode = code;
++
++      return res;
++    },
++    json(payload: unknown) {
++      captured.body = payload;
++
++      return res;
++    },
++  };
++
++  await chatWithNexa({ body } as unknown as Request, res as unknown as Response);
++
++  return captured;
++}
++
++function useProvider(provider: FakeProvider, overrides: Partial<typeof fastConfig> = {}) {
++  setNexaEngine(new AIEngine({ ...fastConfig, ...overrides }, provider));
++}
++
++beforeEach(() => {
++  mock.method(console, 'log', () => {});
++  mock.method(console, 'warn', () => {});
++  mock.method(console, 'error', () => {});
++});
++
++afterEach(() => {
++  setNexaEngine(undefined);
++  mock.restoreAll();
++});
++
++test('returns 200 with output, model and provider on success', async () => {
++  useProvider(fakeProvider(async () => 'Hi there'));
++
++  const result = await callChat({ message: 'Hello' });
++
++  assert.equal(result.statusCode, 200);
++  assert.deepEqual(result.body, {
++    output: 'Hi there',
++    model: 'gemini-3.6-flash',
++    provider: 'fake',
++  });
++});
++
++test('rejects missing, empty and non-string messages with 400', async () => {
++  for (const body of [undefined, {}, { message: '   ' }, { message: 42 }]) {
++    const result = await callChat(body);
++
++    assert.equal(result.statusCode, 400, JSON.stringify(body));
++  }
++});
++
++test('rejects over-long messages with 413', async () => {
++  const result = await callChat({ message: 'x'.repeat(MAX_MESSAGE_LENGTH + 1) });
++
++  assert.equal(result.statusCode, 413);
++});
++
++const failureCases: Array<[string, () => Promise<string>, number, string]> = [
++  ['rate limit', async () => { throw upstreamError(429); }, 429, 'rate_limit'],
++  ['unavailable', async () => { throw upstreamError(503); }, 503, 'unavailable'],
++  ['model not found', async () => { throw upstreamError(404); }, 502, 'model_not_found'],
++  ['auth failure', async () => { throw upstreamError(401); }, 502, 'auth'],
++  ['provider config error', async () => { throw new AIProviderError('config', 'no key'); }, 503, 'config'],
++  ['unclassified failure', async () => { throw new Error('boom'); }, 502, 'unknown'],
++];
++
++for (const [name, handler, expectedStatus, expectedCode] of failureCases) {
++  test(`maps a provider ${name} to HTTP ${expectedStatus} (${expectedCode}) without leaking upstream text`, async () => {
++    useProvider(fakeProvider(handler));
++
++    const result = await callChat({ message: 'Hello' });
++
++    assert.equal(result.statusCode, expectedStatus);
++    assert.equal((result.body as { code?: string }).code, expectedCode);
++    assert.ok(!JSON.stringify(result.body).includes('upstream detail'));
++  });
++}
++
++test('maps a provider timeout to HTTP 504', async () => {
++  useProvider(fakeProvider(() => new Promise<string>(() => {})), { timeoutMs: 20 });
++
++  const result = await callChat({ message: 'Hello' });
++
++  assert.equal(result.statusCode, 504);
++  assert.equal((result.body as { code?: string }).code, 'timeout');
++});
++
++test('retries a transient failure and still returns 200', async () => {
++  const provider = fakeProvider(async (_options, call) => {
++    if (call === 1) throw upstreamError(503);
++
++    return 'second try';
++  });
++
++  useProvider(provider, { maxRetries: 2 });
++
++  const result = await callChat({ message: 'Hello' });
++
++  assert.equal(result.statusCode, 200);
++  assert.equal(provider.calls, 2);
++});
++
++test('returns a generic 500 for errors that are not provider errors', async () => {
++  setNexaEngine({
++    run: async () => {
++      throw new Error('internal detail');
++    },
++  } as unknown as AIEngine);
++
++  const result = await callChat({ message: 'Hello' });
++
++  assert.equal(result.statusCode, 500);
++  assert.ok(!JSON.stringify(result.body).includes('internal detail'));
++});
+diff --git a/apps/ai/tests/nexa-route.integration.test.ts b/apps/ai/tests/nexa-route.integration.test.ts
+new file mode 100644
+index 0000000..7a6b644
+--- /dev/null
++++ b/apps/ai/tests/nexa-route.integration.test.ts
+@@ -0,0 +1,117 @@
++import assert from 'node:assert/strict';
++import { once } from 'node:events';
++import type { Server } from 'node:http';
++import type { AddressInfo } from 'node:net';
++import { after, afterEach, before, beforeEach, mock, test } from 'node:test';
++import { AIEngine } from '../core/engine.js';
++import { createApp } from '../src/app.js';
++import { setNexaEngine } from '../src/services/nexaService.js';
++import { fakeProvider, fastConfig, upstreamError } from './helpers.js';
++import type { FakeProvider } from './helpers.js';
++
++const ALLOWED_ORIGIN = 'http://localhost:5173';
++
++let server: Server;
++let baseUrl: string;
++
++before(async () => {
++  server = createApp({ allowedOrigins: [ALLOWED_ORIGIN] }).listen(0, '127.0.0.1');
++  await once(server, 'listening');
++
++  const { port } = server.address() as AddressInfo;
++
++  baseUrl = `http://127.0.0.1:${port}`;
++});
++
++after(
++  () =>
++    new Promise<void>((resolve) => {
++      server.closeAllConnections();
++      server.close(() => resolve());
++    }),
++);
++
++beforeEach(() => {
++  mock.method(console, 'log', () => {});
++  mock.method(console, 'warn', () => {});
++  mock.method(console, 'error', () => {});
++});
++
++afterEach(() => {
++  setNexaEngine(undefined);
++  mock.restoreAll();
++});
++
++function useProvider(provider: FakeProvider) {
++  setNexaEngine(new AIEngine(fastConfig, provider));
++}
++
++function postChat(body: string, headers: Record<string, string> = {}) {
++  return fetch(`${baseUrl}/api/nexa/chat`, {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json', ...headers },
++    body,
++  });
++}
++
++test('GET /health reports the backend as online', async () => {
++  const response = await fetch(`${baseUrl}/health`);
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(await response.json(), { status: 'online', system: 'Nexa Backend' });
++});
++
++test('POST /api/nexa/chat returns the AI output', async () => {
++  useProvider(fakeProvider(async (options) => `echo: ${options.input}`));
++
++  const response = await postChat(JSON.stringify({ message: 'Hello' }));
++
++  assert.equal(response.status, 200);
++  assert.deepEqual(await response.json(), {
++    output: 'echo: Hello',
++    model: 'gemini-3.6-flash',
++    provider: 'fake',
++  });
++});
++
++test('POST /api/nexa/chat rejects an empty message with 400', async () => {
++  const response = await postChat(JSON.stringify({ message: '  ' }));
++
++  assert.equal(response.status, 400);
++});
++
++test('POST /api/nexa/chat returns JSON 400 for a malformed body', async () => {
++  const response = await postChat('{not json');
++
++  assert.equal(response.status, 400);
++  assert.deepEqual(await response.json(), { error: 'Invalid request body.' });
++});
++
++test('POST /api/nexa/chat returns 413 for a body over the size limit', async () => {
++  const response = await postChat(JSON.stringify({ message: 'x'.repeat(20000) }));
++
++  assert.equal(response.status, 413);
++});
++
++test('POST /api/nexa/chat maps provider failures to HTTP errors', async () => {
++  useProvider(
++    fakeProvider(async () => {
++      throw upstreamError(429);
++    }),
++  );
++
++  const response = await postChat(JSON.stringify({ message: 'Hello' }));
++  const body = (await response.json()) as { code: string; error: string };
++
++  assert.equal(response.status, 429);
++  assert.equal(body.code, 'rate_limit');
++  assert.ok(!JSON.stringify(body).includes('upstream detail'));
++});
++
++test('CORS allows the configured origin and not others', async () => {
++  const allowed = await fetch(`${baseUrl}/health`, { headers: { Origin: ALLOWED_ORIGIN } });
++  const blocked = await fetch(`${baseUrl}/health`, { headers: { Origin: 'http://evil.example' } });
++
++  assert.equal(allowed.headers.get('access-control-allow-origin'), ALLOWED_ORIGIN);
++  assert.equal(blocked.headers.get('access-control-allow-origin'), null);
++});
+diff --git a/docs/AI_BACKEND.md b/docs/AI_BACKEND.md
+new file mode 100644
+index 0000000..daab522
+--- /dev/null
++++ b/docs/AI_BACKEND.md
+@@ -0,0 +1,34 @@
++# Nexa AI backend (`apps/ai`)
++
++## Configuration
++
++Settings come from environment variables. On startup the server loads `.env` files from the
++current directory up to the repository root, so the repo-root `.env` is found even though
++`npm run start:ai` runs from `apps/ai`. Variables already set in the shell win over files, and a
++nearer `.env` wins over one further up. See `.env.example` for every variable.
++
++## Provider errors
++
++Provider failures are normalised to `AIProviderError` (`apps/ai/core/errors.ts`) and returned to
++the client as JSON `{ "error": "<safe message>", "code": "<code>" }`. Upstream response text is
++logged on the server only.
++
++| code | HTTP | meaning | retried |
++| --- | --- | --- | --- |
++| `config` | 503 | missing API key, unknown provider or model | no |
++| `auth` | 502 | provider rejected the credentials (401/403) | no |
++| `model_not_found` | 502 | provider says the model does not exist or is unavailable (404) | no |
++| `rate_limit` | 429 | provider rate limit (429) | yes |
++| `unavailable` | 503 | provider 5xx or network failure | yes |
++| `timeout` | 504 | no response within `DALTRON_AI_TIMEOUT_MS` | no |
++| `bad_request` | 502 | provider rejected the request (400) | no |
++| `unknown` | 502 | anything else | no |
++
++Retries use exponential backoff (`DALTRON_AI_RETRY_BASE_DELAY_MS`, doubling) up to
++`DALTRON_AI_MAX_RETRIES`. A timeout stops waiting but cannot cancel the upstream request, so
++timeouts are not retried.
++
++## Tests
++
++`npm test` builds `apps/ai` and runs `dist/tests/*.test.js` with the Node test runner. Tests use
++fake providers; none call Gemini or need an API key.
+-- 
+2.43.0
+

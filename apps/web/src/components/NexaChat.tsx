@@ -1,20 +1,27 @@
-import { useState } from 'react'
-import { sendMessageToNexa } from '../services/nexaApi'
+import { useState } from 'react';
+import { sendMessageToNexa } from '../services/nexaApi';
+
+interface ChatMessage {
+  sender: string;
+  text: string;
+  type: 'ai' | 'user';
+}
 
 function NexaChat() {
-  const [input, setInput] = useState('')
-  const [messages, setMessages] = useState([
+  const [input, setInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       sender: 'Nexa',
       text: "Hello. I'm Nexa, the intelligent assistant within the DALTRON ecosystem.",
       type: 'ai',
     },
-  ])
+  ]);
 
   async function handleSend() {
-    if (!input.trim()) return
+    const userMessage = input.trim();
 
-    const userMessage = input
+    if (!userMessage || isSending) return;
 
     setMessages((previous) => [
       ...previous,
@@ -23,20 +30,36 @@ function NexaChat() {
         text: userMessage,
         type: 'user',
       },
-    ])
+    ]);
 
-    setInput('')
+    setInput('');
+    setIsSending(true);
 
-    const response = await sendMessageToNexa(userMessage)
+    try {
+      const response = await sendMessageToNexa(userMessage);
 
-    setMessages((previous) => [
-      ...previous,
-      {
-        sender: 'Nexa',
-        text: response.message,
-        type: 'ai',
-      },
-    ])
+      setMessages((previous) => [
+        ...previous,
+        {
+          sender: 'Nexa',
+          text: response.output,
+          type: 'ai',
+        },
+      ]);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          sender: 'Nexa',
+          text: `Sorry, I couldn't respond right now. (${reason})`,
+          type: 'ai',
+        },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
   }
 
   return (
@@ -58,14 +81,10 @@ function NexaChat() {
           <div
             key={index}
             className={`nexa-message ${
-              message.type === 'ai'
-                ? 'nexa-message-ai'
-                : 'nexa-message-user'
+              message.type === 'ai' ? 'nexa-message-ai' : 'nexa-message-user'
             }`}
           >
-            {message.type === 'ai' && (
-              <div className="nexa-avatar">N</div>
-            )}
+            {message.type === 'ai' && <div className="nexa-avatar">N</div>}
 
             <div className="nexa-message-content">
               <strong>{message.sender}</strong>
@@ -83,17 +102,17 @@ function NexaChat() {
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
-              handleSend()
+              handleSend();
             }
           }}
         />
 
-        <button type="button" onClick={handleSend}>
-          Send
+        <button type="button" onClick={handleSend} disabled={isSending}>
+          {isSending ? 'Sending...' : 'Send'}
         </button>
       </div>
     </section>
-  )
+  );
 }
 
-export default NexaChat
+export default NexaChat;
